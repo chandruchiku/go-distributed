@@ -22,6 +22,7 @@ func (app *Config) routes() http.Handler {
 
 	mux.Use(middleware.Heartbeat("/health"))
 	mux.Post("/", app.Broker)
+	mux.Post("/handle", app.HandleSubmission)
 
 	return mux
 }

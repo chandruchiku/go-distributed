@@ -8,6 +8,7 @@
                 <hr>
                 <a id="brokerBtn" href="javascript:void(0);" class="btn btn-outline-secondary">Broker</a>
                 <a id="authBrokerBtn" href="javascript:void(0);" class="btn btn-outline-secondary">Test Auth</a>
+                <a id="logBtn" href="javascript:void(0);" class="btn btn-outline-secondary">Test Log</a>
 
                 <div id="output" class="mt-5" style="outline: 1px solid silver; padding: 2em;">
                     <span class="text-muted">Output shows here...</span>
@@ -35,6 +36,7 @@
     <script>
         const brokerBtn = document.getElementById('brokerBtn');
         const authBrokerBtn = document.getElementById('authBrokerBtn');
+        const logBtn = document.getElementById('logBtn');
         const output = document.getElementById('output');
         const sent = document.getElementById('payload');
         const received = document.getElementById('received');
@@ -95,6 +97,42 @@
                 output.innerHTML = `<span class="text-danger">${e.message}</span>`;
             }
         });
+
+        logBtn.addEventListener('click', async () => {
+            try {
+                const payload = {
+                    action: 'log',
+                    log: {
+                        name: 'event',
+                        data: 'This is a test log message'
+                    }
+                };
+                const headers = new Headers();
+                headers.append('Content-Type', 'application/json');
+
+                const response = await fetch('http:\/\/localhost:8080/handle', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                sent.innerHTML = JSON.stringify(payload, null, 2);
+                received.innerHTML = JSON.stringify(data, null, 2);
+
+                if (data.error) {
+                    console.error(data.error);
+                    output.innerHTML = `<span class="text-danger">${data.error}</span>`;
+                } else {
+                    output.innerHTML += `<br><span class="text-success">Response: ${data.message}</span>`;
+                }
+            } catch (e) {
+                console.error(e);
+                output.innerHTML = `<span class="text-danger">${e.message}</span>`;
+            }
+        });
+        
+
 
     </script>
 {{end}}

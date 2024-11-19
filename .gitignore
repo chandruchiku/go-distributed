@@ -2,3 +2,5 @@ authentication-service/authApp
 broker-service/brokerApp
 front-end/frontApp
 project/db-data/mongo/*
+project/db-data/postgres/*
+project/db-data/rabbitmq/*

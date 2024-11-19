@@ -1,6 +1,7 @@
 package main
 
 import (
+	"broker-service/event"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,14 @@ type RequestPayload struct {
 	Action string      `json:"action"`
 	Auth   AuthPayload `json:"auth,omitempty"`
 	Log    LogPayload  `json:"log,omitempty"`
+	Mail   MailPayload `json:"mail,omitempty"`
+}
+
+type MailPayload struct {
+	To      string `json:"to"`
+	From    string `json:"from"`
+	Subject string `json:"subject"`
+	Message string `json:"message"`
 }
 
 type AuthPayload struct {
@@ -47,7 +56,10 @@ func (app *Config) HandleSubmission(w http.ResponseWriter, r *http.Request) {
 	case "auth":
 		app.authenticate(w, &requestPayload.Auth)
 	case "log":
-		app.log(w, &requestPayload.Log)
+		// app.log(w, &requestPayload.Log)
+		app.logEventViaRabbit(w, &requestPayload.Log)
+	case "mail":
+		app.mail(w, &requestPayload.Mail)
 	default:
 		app.errorJSON(w, errors.New("unknown action"))
 	}
@@ -124,7 +136,7 @@ func (app *Config) log(w http.ResponseWriter, payload *LogPayload) {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusAccepted {
-		app.errorJSON(w, err)
+		app.errorJSON(w, errors.New("error logging"))
 		return
 	}
 
@@ -133,4 +145,70 @@ func (app *Config) log(w http.ResponseWriter, payload *LogPayload) {
 	responsePayload.Error = false
 
 	_ = app.writeJson(w, http.StatusAccepted, responsePayload)
+}
+
+func (app *Config) mail(w http.ResponseWriter, payload *MailPayload) {
+	jsonData, _ := json.MarshalIndent(payload, "", "\t")
+	log.Printf("Mailing: %s", jsonData)
+
+	request, err := http.NewRequest("POST", "http://mailer-service:8080/send", bytes.NewBuffer(jsonData))
+	if err != nil {
+		app.errorJSON(w, err)
+		return
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		app.errorJSON(w, err)
+		return
+	}
+
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusAccepted {
+		app.errorJSON(w, errors.New("error calling mail service"))
+		return
+	}
+
+	var responsePayload jsonResponse
+	responsePayload.Message = "Mailed"
+	responsePayload.Error = false
+
+	_ = app.writeJson(w, http.StatusAccepted, responsePayload)
+}
+
+func (app *Config) logEventViaRabbit(w http.ResponseWriter, l *LogPayload) {
+	err := app.pushToQueue(l.Name, l.Data)
+	if err != nil {
+		app.errorJSON(w, err)
+		return
+	}
+
+	var resp jsonResponse
+	resp.Message = "Logged via RabbitMQ"
+	resp.Error = false
+
+	_ = app.writeJson(w, http.StatusAccepted, resp)
+}
+
+func (app *Config) pushToQueue(name, msg string) error {
+	emmitter, err := event.NewEventEmmitter(app.Rabbit)
+	if err != nil {
+		return err
+	}
+
+	payload := LogPayload{
+		Name: name,
+		Data: msg,
+	}
+
+	j, _ := json.MarshalIndent(payload, "", "\t")
+	err = emmitter.Push(string(j), "log.INFO")
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
